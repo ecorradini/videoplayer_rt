@@ -233,9 +233,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Usage: test <file>\n");
     exit(1);
   }
-  // Register all formats and codecs
-  av_register_all();
-  
+	
   if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_TIMER)) {
     fprintf(stderr, "Could not initialize SDL - %s\n", SDL_GetError());
     exit(1);
@@ -295,7 +293,7 @@ int main(int argc, char *argv[]) {
   
   if(SDL_OpenAudio(&wanted_spec, &spec) < 0) {
     fprintf(stderr, "SDL_OpenAudio: %s\n", SDL_GetError());
-    return -1;
+    //return -1;
   }
 
   avcodec_open2(aCodecCtx, aCodec, NULL);
