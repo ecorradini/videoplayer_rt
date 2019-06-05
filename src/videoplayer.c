@@ -1,26 +1,3 @@
-// tutorial03.c
-// A pedagogical video player that will stream through every video frame as fast as it can
-// and play audio (out of sync).
-//
-// Code based on FFplay, Copyright (c) 2003 Fabrice Bellard, 
-// and a tutorial by Martin Bohme (boehme@inb.uni-luebeckREMOVETHIS.de)
-// Tested on Gentoo, CVS version 5/01/07 compiled with GCC 4.1.1
-// With updates from https://github.com/chelyaev/ffmpeg-tutorial
-// Updates tested on:
-// LAVC 54.59.100, LAVF 54.29.104, LSWS 2.1.101, SDL 1.2.15
-// on GCC 4.7.2 in Debian February 2015
-//
-// Use
-//
-// gcc -o tutorial03 tutorial03.c -lavformat -lavcodec -lswscale -lz -lm `sdl-config --cflags --libs`
-// to build (assuming libavformat and libavcodec are correctly installed, 
-// and assuming you have sdl-config. Please refer to SDL docs for your installation.)
-//
-// Run using
-// tutorial03 myvideofile.mpg
-//
-// to play the stream on your screen.
-
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
@@ -35,14 +12,15 @@
 #include <stdio.h>
 #include <assert.h>
 
+#include "libdl/dl_syscalls.h"
+#include <sched.h>
+
 // compatibility with newer API
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(55,28,1)
 #define av_frame_alloc avcodec_alloc_frame
 #define av_frame_free avcodec_free_frame
 #endif
 
-//#define SDL_AUDIO_BUFFER_SIZE 1024
-//#define MAX_AUDIO_FRAME_SIZE 192000
 
 typedef struct PacketQueue {
   AVPacketList *first_pkt, *last_pkt;
@@ -55,6 +33,33 @@ typedef struct PacketQueue {
 PacketQueue audioq;
 
 int quit = 0;
+
+void set_deadline_sched() {
+	struct sched_attr attr;
+	memset(&attr, 0, sizeof(struct sched_attr));
+	attr.size = sizeof(struct sched_attr);
+	attr.sched_policy = SCHED_DEADLINE;
+	attr.sched_runtime  =  5000000;
+	attr.sched_period   = 16000000;
+	attr.sched_deadline = 10000000;
+	sched_setattr(0, &attr, 0);
+}
+
+void unset_deadline_sched() {
+	sched_setattr(0, NULL, NULL);
+}
+
+void print_scheduler() {
+	if(sched_getscheduler(0)==SCHED_OTHER) {
+		printf("Scheduler: SCHED_OTHER\n");
+	}
+	else if(sched_getscheduler(0)==SCHED_DEADLINE) {
+		printf("Scheduler: SCHED_DEADLINE\n");
+	}
+	else {
+		printf("Scheduler: NON CONOSCIUTO\n");
+	}
+}
 
 void packet_queue_init(PacketQueue *q) {
   memset(q, 0, sizeof(PacketQueue));
@@ -123,91 +128,6 @@ static int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block)
   SDL_UnlockMutex(q->mutex);
   return ret;
 }
-/*
-int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf, int buf_size) {
-
-  static AVPacket pkt;
-  static uint8_t *audio_pkt_data = NULL;
-  static int audio_pkt_size = 0;
-  static AVFrame frame;
-
-  int len1, data_size = 0;
-
-  for(;;) {
-    while(audio_pkt_size > 0) {
-      int got_frame = 0;
-      len1 = avcodec_decode_audio4(aCodecCtx, &frame, &got_frame, &pkt);
-      if(len1 < 0) {
-	// if error, skip frame
-	audio_pkt_size = 0;
-	break;
-      }
-      audio_pkt_data += len1;
-      audio_pkt_size -= len1;
-      data_size = 0;
-      if(got_frame) {
-	data_size = av_samples_get_buffer_size(NULL, 
-					       aCodecCtx->channels,
-					       frame.nb_samples,
-					       aCodecCtx->sample_fmt,
-					       1);
-	assert(data_size <= buf_size);
-	memcpy(audio_buf, frame.data[0], data_size);
-      }
-      if(data_size <= 0) {
-	// No data yet, get more frames 
-	continue;
-      }
-      // We have data, return it and come back for more later 
-      return data_size;
-    }
-    if(pkt.data)
-      av_free_packet(&pkt);
-
-    if(quit) {
-      return -1;
-    }
-
-    if(packet_queue_get(&audioq, &pkt, 1) < 0) {
-      return -1;
-    }
-    audio_pkt_data = pkt.data;
-    audio_pkt_size = pkt.size;
-  }
-}*/
-/*
-void audio_callback(void *userdata, Uint8 *stream, int len) {
-
-  AVCodecContext *aCodecCtx = (AVCodecContext *)userdata;
-  int len1, audio_size;
-
-  static uint8_t audio_buf[(MAX_AUDIO_FRAME_SIZE * 3) / 2];
-  static unsigned int audio_buf_size = 0;
-  static unsigned int audio_buf_index = 0;
-
-  while(len > 0) {
-    if(audio_buf_index >= audio_buf_size) {
-      // We have already sent all our data; get more
-      audio_size = audio_decode_frame(aCodecCtx, audio_buf, sizeof(audio_buf));
-      if(audio_size < 0) {
-	// If error, output silence 
-	audio_buf_size = 1024; // arbitrary?
-	memset(audio_buf, 0, audio_buf_size);
-      } else {
-	audio_buf_size = audio_size;
-      }
-      audio_buf_index = 0;
-    }
-    len1 = audio_buf_size - audio_buf_index;
-    if(len1 > len)
-      len1 = len;
-    memcpy(stream, (uint8_t *)audio_buf + audio_buf_index, len1);
-    len -= len1;
-    stream += len1;
-    audio_buf_index += len1;
-  }
-}*/
-
 int main(int argc, char *argv[]) {
   AVFormatContext *pFormatCtx = NULL;
   int             i, videoStream, audioStream;
@@ -234,6 +154,8 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Could not initialize SDL - %s\n", SDL_GetError());
     exit(1);
   }
+  
+  print_scheduler();
 
   // Open video file
   if(avformat_open_input(&pFormatCtx, argv[1], NULL, NULL)!=0)
@@ -256,43 +178,7 @@ int main(int argc, char *argv[]) {
   }
   if(videoStream==-1)
     return -1; // Didn't find a video stream
-   
-   /*
-  aCodecCtxOrig=pFormatCtx->streams[audioStream]->codec;
-  aCodec = avcodec_find_decoder(aCodecCtxOrig->codec_id);
-  if(!aCodec) {
-    fprintf(stderr, "Unsupported codec!\n");
-    return -1;
-  }*/
-
-/*
-  // Copy context
-  aCodecCtx = avcodec_alloc_context3(aCodec);
-  if(avcodec_copy_context(aCodecCtx, aCodecCtxOrig) != 0) {
-    fprintf(stderr, "Couldn't copy codec context");
-    return -1; // Error copying codec context
-  }*/
-
-/*
-  // Set audio settings from codec info
-  wanted_spec.freq = aCodecCtx->sample_rate;
-  wanted_spec.format = AUDIO_S16SYS;
-  wanted_spec.channels = aCodecCtx->channels;
-  wanted_spec.silence = 0;
-  wanted_spec.samples = SDL_AUDIO_BUFFER_SIZE;
-  wanted_spec.callback = audio_callback;
-  wanted_spec.userdata = aCodecCtx;
   
-  if(SDL_OpenAudio(&wanted_spec, &spec) < 0) {
-    fprintf(stderr, "SDL_OpenAudio: %s\n", SDL_GetError());
-    //return -1;
-  }
-
-  avcodec_open2(aCodecCtx, aCodec, NULL);
-
-  // audio_st = pFormatCtx->streams[index]
-  packet_queue_init(&audioq);
-  SDL_PauseAudio(0);*/
 
   // Get a pointer to the codec context for the video stream
   pCodecCtxOrig=pFormatCtx->streams[videoStream]->codec;
@@ -351,7 +237,9 @@ int main(int argc, char *argv[]) {
 
 
   // Read frames and save first five frames to disk
+  set_deadline_sched();
   i=0;
+  print_scheduler();
   while(av_read_frame(pFormatCtx, &packet)>=0) {
     // Is this a packet from the video stream?
     if(packet.stream_index==videoStream) {
@@ -394,6 +282,7 @@ int main(int argc, char *argv[]) {
     SDL_PollEvent(&event);
     switch(event.type) {
     case SDL_QUIT:
+      unset_deadline_sched();
       quit = 1;
       SDL_Quit();
       exit(0);
@@ -403,6 +292,9 @@ int main(int argc, char *argv[]) {
     }
 
   }
+  
+  unset_deadline_sched();
+  print_scheduler();
 
   // Free the YUV frame
   av_frame_free(&pFrame);
@@ -418,3 +310,5 @@ int main(int argc, char *argv[]) {
   
   return 0;
 }
+
+

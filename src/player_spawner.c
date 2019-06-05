@@ -17,7 +17,7 @@
 
 int main()
 {	
-	
+	/*
 	struct sched_attr attr;
 	memset(&attr, 0, sizeof(struct sched_attr));
 	attr.size = sizeof(struct sched_attr);
@@ -25,7 +25,9 @@ int main()
 	attr.sched_runtime  =  5000000;
 	attr.sched_period   = 40000000;
 	attr.sched_deadline = 10000000;
-	pid_t pid = sched_setattr(0, &attr, 0);
+	pid_t pid = sched_setattr(0, &attr, 0);*/
+	
+	pid_t pid = fork();
 	
 	if (pid==0) {
 		printf("pid 0\n");
