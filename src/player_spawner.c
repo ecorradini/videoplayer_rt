@@ -16,8 +16,7 @@
 #include "libdl/dl_syscalls.h"
 
 int main()
-{
-	
+{	
 	
 	struct sched_attr attr;
 	memset(&attr, 0, sizeof(struct sched_attr));
@@ -26,10 +25,7 @@ int main()
 	attr.sched_runtime  =  5000000;
 	attr.sched_period   = 40000000;
 	attr.sched_deadline = 10000000;
-	if(sched_setattr(getpid(), &attr, 0)!=0) printf("sched_setattr()");
-	printf("pid %d\n", getpid());
-	
-	pid_t pid = fork();
+	pid_t pid = sched_setattr(0, &attr, 0);
 	
 	if (pid==0) {
 		printf("pid 0\n");
