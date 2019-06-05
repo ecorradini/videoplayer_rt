@@ -41,8 +41,8 @@
 #define av_frame_free avcodec_free_frame
 #endif
 
-#define SDL_AUDIO_BUFFER_SIZE 1024
-#define MAX_AUDIO_FRAME_SIZE 192000
+//#define SDL_AUDIO_BUFFER_SIZE 1024
+//#define MAX_AUDIO_FRAME_SIZE 192000
 
 typedef struct PacketQueue {
   AVPacketList *first_pkt, *last_pkt;
@@ -123,7 +123,7 @@ static int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block)
   SDL_UnlockMutex(q->mutex);
   return ret;
 }
-
+/*
 int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf, int buf_size) {
 
   static AVPacket pkt;
@@ -138,7 +138,7 @@ int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf, int buf_si
       int got_frame = 0;
       len1 = avcodec_decode_audio4(aCodecCtx, &frame, &got_frame, &pkt);
       if(len1 < 0) {
-	/* if error, skip frame */
+	// if error, skip frame
 	audio_pkt_size = 0;
 	break;
       }
@@ -155,10 +155,10 @@ int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf, int buf_si
 	memcpy(audio_buf, frame.data[0], data_size);
       }
       if(data_size <= 0) {
-	/* No data yet, get more frames */
+	// No data yet, get more frames 
 	continue;
       }
-      /* We have data, return it and come back for more later */
+      // We have data, return it and come back for more later 
       return data_size;
     }
     if(pkt.data)
@@ -174,8 +174,8 @@ int audio_decode_frame(AVCodecContext *aCodecCtx, uint8_t *audio_buf, int buf_si
     audio_pkt_data = pkt.data;
     audio_pkt_size = pkt.size;
   }
-}
-
+}*/
+/*
 void audio_callback(void *userdata, Uint8 *stream, int len) {
 
   AVCodecContext *aCodecCtx = (AVCodecContext *)userdata;
@@ -187,10 +187,10 @@ void audio_callback(void *userdata, Uint8 *stream, int len) {
 
   while(len > 0) {
     if(audio_buf_index >= audio_buf_size) {
-      /* We have already sent all our data; get more */
+      // We have already sent all our data; get more
       audio_size = audio_decode_frame(aCodecCtx, audio_buf, sizeof(audio_buf));
       if(audio_size < 0) {
-	/* If error, output silence */
+	// If error, output silence 
 	audio_buf_size = 1024; // arbitrary?
 	memset(audio_buf, 0, audio_buf_size);
       } else {
@@ -206,7 +206,7 @@ void audio_callback(void *userdata, Uint8 *stream, int len) {
     stream += len1;
     audio_buf_index += len1;
   }
-}
+}*/
 
 int main(int argc, char *argv[]) {
   AVFormatContext *pFormatCtx = NULL;
@@ -218,10 +218,6 @@ int main(int argc, char *argv[]) {
   AVPacket        packet;
   int             frameFinished;
   struct SwsContext *sws_ctx = NULL;
-  
-  AVCodecContext  *aCodecCtxOrig = NULL;
-  AVCodecContext  *aCodecCtx = NULL;
-  AVCodec         *aCodec = NULL;
 
   SDL_Overlay     *bmp;
   SDL_Surface     *screen;
@@ -252,36 +248,32 @@ int main(int argc, char *argv[]) {
     
   // Find the first video stream
   videoStream=-1;
-  audioStream=-1;
   for(i=0; i<pFormatCtx->nb_streams; i++) {
     if(pFormatCtx->streams[i]->codec->codec_type==AVMEDIA_TYPE_VIDEO &&
        videoStream < 0) {
       videoStream=i;
     }
-    if(pFormatCtx->streams[i]->codec->codec_type==AVMEDIA_TYPE_AUDIO &&
-       audioStream < 0) {
-      audioStream=i;
-    }
   }
   if(videoStream==-1)
     return -1; // Didn't find a video stream
-  if(audioStream==-1)
-    return -1;
    
+   /*
   aCodecCtxOrig=pFormatCtx->streams[audioStream]->codec;
   aCodec = avcodec_find_decoder(aCodecCtxOrig->codec_id);
   if(!aCodec) {
     fprintf(stderr, "Unsupported codec!\n");
     return -1;
-  }
+  }*/
 
+/*
   // Copy context
   aCodecCtx = avcodec_alloc_context3(aCodec);
   if(avcodec_copy_context(aCodecCtx, aCodecCtxOrig) != 0) {
     fprintf(stderr, "Couldn't copy codec context");
     return -1; // Error copying codec context
-  }
+  }*/
 
+/*
   // Set audio settings from codec info
   wanted_spec.freq = aCodecCtx->sample_rate;
   wanted_spec.format = AUDIO_S16SYS;
@@ -300,7 +292,7 @@ int main(int argc, char *argv[]) {
 
   // audio_st = pFormatCtx->streams[index]
   packet_queue_init(&audioq);
-  SDL_PauseAudio(0);
+  SDL_PauseAudio(0);*/
 
   // Get a pointer to the codec context for the video stream
   pCodecCtxOrig=pFormatCtx->streams[videoStream]->codec;
@@ -357,6 +349,7 @@ int main(int argc, char *argv[]) {
 			   NULL
 			   );
 
+
   // Read frames and save first five frames to disk
   i=0;
   while(av_read_frame(pFormatCtx, &packet)>=0) {
@@ -367,30 +360,30 @@ int main(int argc, char *argv[]) {
       
       // Did we get a video frame?
       if(frameFinished) {
-	SDL_LockYUVOverlay(bmp);
+		SDL_LockYUVOverlay(bmp);
 
-	AVPicture pict;
-	pict.data[0] = bmp->pixels[0];
-	pict.data[1] = bmp->pixels[2];
-	pict.data[2] = bmp->pixels[1];
+		AVPicture pict;
+		pict.data[0] = bmp->pixels[0];
+		pict.data[1] = bmp->pixels[2];
+		pict.data[2] = bmp->pixels[1];
 
-	pict.linesize[0] = bmp->pitches[0];
-	pict.linesize[1] = bmp->pitches[2];
-	pict.linesize[2] = bmp->pitches[1];
+		pict.linesize[0] = bmp->pitches[0];
+		pict.linesize[1] = bmp->pitches[2];
+		pict.linesize[2] = bmp->pitches[1];
 
-	// Convert the image into YUV format that SDL uses	
-	sws_scale(sws_ctx, (uint8_t const * const *)pFrame->data,
-		  pFrame->linesize, 0, pCodecCtx->height,
-		  pict.data, pict.linesize);
-	
-	SDL_UnlockYUVOverlay(bmp);
-	
-	rect.x = 0;
-	rect.y = 0;
-	rect.w = pCodecCtx->width;
-	rect.h = pCodecCtx->height;
-	SDL_DisplayYUVOverlay(bmp, &rect);
-	av_free_packet(&packet);
+		// Convert the image into YUV format that SDL uses	
+		sws_scale(sws_ctx, (uint8_t const * const *)pFrame->data,
+			  pFrame->linesize, 0, pCodecCtx->height,
+			  pict.data, pict.linesize);
+		
+		SDL_UnlockYUVOverlay(bmp);
+		
+		rect.x = 0;
+		rect.y = 0;
+		rect.w = pCodecCtx->width;
+		rect.h = pCodecCtx->height;
+		SDL_DisplayYUVOverlay(bmp, &rect);
+		av_free_packet(&packet);
       }
     } else if(packet.stream_index==audioStream) {
       packet_queue_put(&audioq, &packet);
@@ -417,8 +410,8 @@ int main(int argc, char *argv[]) {
   // Close the codecs
   avcodec_close(pCodecCtxOrig);
   avcodec_close(pCodecCtx);
-  avcodec_close(aCodecCtxOrig);
-  avcodec_close(aCodecCtx);
+  //avcodec_close(aCodecCtxOrig);
+  //avcodec_close(aCodecCtx);
   
   // Close the video file
   avformat_close_input(&pFormatCtx);
