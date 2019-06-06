@@ -34,19 +34,23 @@ PacketQueue audioq;
 
 int quit = 0;
 
+struct sched_attr backup;
+
 void set_deadline_sched() {
+	memset(&backup, 0, sizeof(struct sched_attr));
+	sched_getattr(0, &backup, sizeof(struct sched_attr), NULL);
 	struct sched_attr attr;
 	memset(&attr, 0, sizeof(struct sched_attr));
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_policy = SCHED_DEADLINE;
-	attr.sched_runtime  =  5000000;
+	attr.sched_runtime  =  4599220;
 	attr.sched_period   = 16000000;
 	attr.sched_deadline = 10000000;
 	sched_setattr(0, &attr, 0);
 }
 
 void unset_deadline_sched() {
-	sched_setattr(0, NULL, NULL);
+	sched_setattr(0, &backup, 0);
 }
 
 void print_scheduler() {
@@ -240,9 +244,12 @@ int main(int argc, char *argv[]) {
   set_deadline_sched();
   i=0;
   print_scheduler();
+  double max_runtime = 0;
+  struct timespec start, end;
   while(av_read_frame(pFormatCtx, &packet)>=0) {
     // Is this a packet from the video stream?
     if(packet.stream_index==videoStream) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
       // Decode video frame
       avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
       
@@ -273,11 +280,12 @@ int main(int argc, char *argv[]) {
 		SDL_DisplayYUVOverlay(bmp, &rect);
 		av_free_packet(&packet);
       }
-    } else if(packet.stream_index==audioStream) {
-      packet_queue_put(&audioq, &packet);
     } else {
       av_free_packet(&packet);
     }
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    double total_time = (end.tv_nsec - start.tv_nsec); // / 1.0e6; //(end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
+    if(total_time>=max_runtime) max_runtime=total_time;
     // Free the packet that was allocated by av_read_frame
     SDL_PollEvent(&event);
     switch(event.type) {
@@ -290,7 +298,7 @@ int main(int argc, char *argv[]) {
     default:
       break;
     }
-
+	
   }
   
   unset_deadline_sched();
@@ -307,6 +315,8 @@ int main(int argc, char *argv[]) {
   
   // Close the video file
   avformat_close_input(&pFormatCtx);
+  
+  	printf("WORST CASE EXECUTION %d\n", max_runtime);
   
   return 0;
 }
