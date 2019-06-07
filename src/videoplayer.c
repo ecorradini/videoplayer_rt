@@ -285,13 +285,14 @@ int main(int argc, char *argv[]) {
   // Read frames and save first five frames to disk
   set_deadline_sched();
   i=0;
+  int total_frames = 0;
   print_scheduler();
   double max_runtime = 0;
   struct timespec start, end;
   while(av_read_frame(pFormatCtx, &packet)>=0) {
+	  clock_gettime(CLOCK_MONOTONIC, &start);
     // Is this a packet from the video stream?
     if(packet.stream_index==videoStream) {
-		clock_gettime(CLOCK_MONOTONIC, &start);
       // Decode video frame
       avcodec_decode_video2(pCodecCtx, pFrame, &frameFinished, &packet);
       
@@ -326,9 +327,17 @@ int main(int argc, char *argv[]) {
       av_free_packet(&packet);
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
-    double total_time = (end.tv_nsec - start.tv_nsec); // / 1.0e6; //(end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
-    if(total_time>=max_runtime) max_runtime=total_time;
-    if (deadline_miss(start, end)) printf("Deadline perse %d\n", deadperse); // controlla deadline
+    deadline_miss(start, end);
+    double total_time;
+    total_time = (end.tv_sec - start.tv_sec) * 1e9;
+    total_time = total_time + (end.tv_nsec - start.tv_nsec);
+    if(total_time>=max_runtime) {
+		max_runtime = total_time;
+		printf("EX TIME %f\n", total_time);
+		printf("MAX RUNTIME %f\n", max_runtime);
+	}
+    ++total_frames;
+    //if (deadline_miss(start, end)) printf("Deadline perse %d\n", deadperse); // controlla deadline
     // Free the packet that was allocated by av_read_frame
     SDL_PollEvent(&event);
     switch(event.type) {
@@ -359,7 +368,9 @@ int main(int argc, char *argv[]) {
   // Close the video file
   avformat_close_input(&pFormatCtx);
   
-  	printf("WORST CASE EXECUTION %d\n", max_runtime);
+  	printf("WORST CASE EXECUTION %f\n", max_runtime);
+  	printf("TOTAL FRAMES %d\n", total_frames);
+  	printf("TOTAL DEADLINE MISSED %d\n", deadperse);
   
   return 0;
 }
