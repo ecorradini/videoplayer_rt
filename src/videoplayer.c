@@ -32,14 +32,17 @@ typedef struct PacketQueue {
 
 PacketQueue audioq;
 
+unsigned deadperse=0; 
+
 int quit = 0;
 
 struct sched_attr backup;
+struct sched_attr attr;
 
 void set_deadline_sched() {
 	memset(&backup, 0, sizeof(struct sched_attr));
 	sched_getattr(0, &backup, sizeof(struct sched_attr), NULL);
-	struct sched_attr attr;
+	
 	memset(&attr, 0, sizeof(struct sched_attr));
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_policy = SCHED_DEADLINE;
@@ -48,6 +51,7 @@ void set_deadline_sched() {
 	attr.sched_deadline = 10000000;
 	sched_setattr(0, &attr, 0);
 }
+
 
 void unset_deadline_sched() {
 	sched_setattr(0, &backup, 0);
@@ -63,6 +67,44 @@ void print_scheduler() {
 	else {
 		printf("Scheduler: NON CONOSCIUTO\n");
 	}
+}
+
+//aggiunge ms millisecondi alla variabile temporale puntata da t
+void time_add_ms(struct timespec *t, int ms) {
+	t->tv_sec += ms/1000;
+	t->tv_nsec += (ms%1000) * 1000000;
+	if( t->tv_nsec > 1000000000) {
+		t->tv_nsec -= 1000000000;
+		t->tv_sec += 1;
+	}
+}
+
+// confronta le due variabili temporali t1 e t2
+// restituisce 0  se t1=t2
+// restituisce +1 se t1>t2
+// restituisce -1 se t1<t2
+int time_cmp(struct timespec t1, struct timespec t2) {
+	if (t1.tv_sec > t2.tv_sec) return 1;
+	if (t1.tv_sec < t2.tv_sec) return -1;
+	if (t1.tv_nsec > t2.tv_nsec) return 1;
+	if (t1.tv_nsec < t2.tv_nsec) return -1;
+	return 0;
+}
+
+// se quando viene riattivato il thread è ancora in esecuzione
+// incrementa il valore di deadperse e restituisce 1, altrimenti 0
+int deadline_miss(struct timespec start, struct timespec end) {
+	//se end > start+tempo di deadline=> deadperse++
+		printf("deadline: %d\n", (long) attr.sched_deadline);
+		printf("start: %lld.%.9ld\n", (long long)start.tv_sec, start.tv_nsec);
+		time_add_ms(&start,(attr.sched_deadline/1000000));
+		printf("startdead: %lld.%.9ld\n", (long long)start.tv_sec, start.tv_nsec);
+	if ( time_cmp(end, start) > 0 ) {  //end.tv_nsec > ( start.tv_nsec + (long) attr.sched_deadline)
+		printf("end: %lld.%.9ld\n", (long long)end.tv_sec, end.tv_nsec);
+		deadperse++;
+		return 1;
+	}
+	return 0;
 }
 
 void packet_queue_init(PacketQueue *q) {
@@ -286,6 +328,7 @@ int main(int argc, char *argv[]) {
     clock_gettime(CLOCK_MONOTONIC, &end);
     double total_time = (end.tv_nsec - start.tv_nsec); // / 1.0e6; //(end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
     if(total_time>=max_runtime) max_runtime=total_time;
+    if (deadline_miss(start, end)) printf("Deadline perse %d\n", deadperse); // controlla deadline
     // Free the packet that was allocated by av_read_frame
     SDL_PollEvent(&event);
     switch(event.type) {
