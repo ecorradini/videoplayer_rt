@@ -46,9 +46,15 @@ void set_deadline_sched() {
 	memset(&attr, 0, sizeof(struct sched_attr));
 	attr.size = sizeof(struct sched_attr);
 	attr.sched_policy = SCHED_DEADLINE;
-	attr.sched_runtime  =  4599220;
-	attr.sched_period   = 16000000;
-	attr.sched_deadline = 10000000;
+	//attr.sched_runtime  = 110211560; //60 fps
+	attr.sched_runtime  = 95878565; //30 fps
+	//attr.sched_runtime  = 65213341; //10 fps
+	//attr.sched_period   = 16000000; //60 fps
+	attr.sched_period   = 33333333.3333; //30 fps
+	//attr.sched_period   = 100000000; //10 fps
+	//attr.sched_deadline = 15000000; //60 fps
+	attr.sched_deadline = 32333333; //30 fps
+	//attr.sched_deadline = 90000000; //10 fps
 	sched_setattr(0, &attr, 0);
 }
 
@@ -95,13 +101,14 @@ int time_cmp(struct timespec t1, struct timespec t2) {
 // incrementa il valore di deadperse e restituisce 1, altrimenti 0
 int deadline_miss(struct timespec start, struct timespec end) {
 	//se end > start+tempo di deadline=> deadperse++
-		printf("deadline: %d\n", (long) attr.sched_deadline);
-		printf("start: %lld.%.9ld\n", (long long)start.tv_sec, start.tv_nsec);
+		//printf("deadline: %d\n", (long) attr.sched_deadline);
+		//printf("start: %lld.%.9ld\n", (long long)start.tv_sec, start.tv_nsec);
 		time_add_ms(&start,(attr.sched_deadline/1000000));
-		printf("startdead: %lld.%.9ld\n", (long long)start.tv_sec, start.tv_nsec);
+		//printf("startdead: %lld.%.9ld\n", (long long)start.tv_sec, start.tv_nsec);
 	if ( time_cmp(end, start) > 0 ) {  //end.tv_nsec > ( start.tv_nsec + (long) attr.sched_deadline)
-		printf("end: %lld.%.9ld\n", (long long)end.tv_sec, end.tv_nsec);
+		//printf("end: %lld.%.9ld\n", (long long)end.tv_sec, end.tv_nsec);
 		deadperse++;
+		printf("%d. MISSED DEADLINE\n", deadperse);
 		return 1;
 	}
 	return 0;
@@ -333,8 +340,6 @@ int main(int argc, char *argv[]) {
     total_time = total_time + (end.tv_nsec - start.tv_nsec);
     if(total_time>=max_runtime) {
 		max_runtime = total_time;
-		printf("EX TIME %f\n", total_time);
-		printf("MAX RUNTIME %f\n", max_runtime);
 	}
     ++total_frames;
     //if (deadline_miss(start, end)) printf("Deadline perse %d\n", deadperse); // controlla deadline
